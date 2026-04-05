@@ -54,7 +54,16 @@ function App() {
           throw new Error('教学楼列表获取失败')
         }
         const data = await response.json()
-        setBuildingOptions(data.buildings)
+        if (data && Array.isArray(data.buildings)) {
+          setBuildingOptions(data.buildings)
+          setFilters((current) => ({
+            ...current,
+            building: data.buildings.includes(current.building) ? current.building : data.buildings[0] ?? '',
+          }))
+        } else {
+          setBuildingOptions([])
+          console.warn('后端返回格式非预期:', data)
+        }
         setFilters((current) => ({
           ...current,
           building: data.buildings.includes(current.building) ? current.building : data.buildings[0] ?? '',
