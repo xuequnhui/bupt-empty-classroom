@@ -1,20 +1,24 @@
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    
-    // 构造一个简单的 JSON 响应
-    const data = {
-      message: "Hello BUPT",
-      path: url.pathname,
-      time: new Date().toISOString()
-    };
 
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json;charset=UTF-8",
-        "Access-Control-Allow-Origin": "*" // 允许跨域，方便前端调试
-      }
+import xituchengBuildings from '../backend/data/xitucheng/buildings.json' assert { type: 'json' };
+import shaheBuildings from '../backend/data/shahe/buildings.json' assert { type: 'json' };
+
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const params = url.searchParams;
+    const campus = params.get('campus');
+
+
+    if (url.pathname.includes('/api/buildings')) {
+      const buildings = campus === 'shahe' ? shaheBuildings : xituchengBuildings;
+      return new Response(JSON.stringify({ buildings }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+
+    return new Response(JSON.stringify({ message: "Handler initialized" }), {
+      headers: { "Content-Type": "application/json" }
     });
   }
 };
