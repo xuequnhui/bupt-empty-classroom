@@ -134,7 +134,8 @@ function App() {
   }, [filters.building, filters.floor])
 
   const occupancyRate = useMemo(() => {
-    if (!result || result.summary.total === 0) {
+    // 使用 可选链 ?. 确保即使 result 或 summary 是空的，也不会崩溃
+    if (!result?.summary || result.summary.total === 0) {
       return 0
     }
     return Math.round((result.summary.busy / result.summary.total) * 100)
