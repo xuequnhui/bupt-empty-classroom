@@ -1,5 +1,12 @@
 export default async function (request) {
-  return new Response(JSON.stringify({ message: "Hello BUPT" }), {
-    headers: { "content-type": "application/json" },
-  });
+  try {
+    return new Response(JSON.stringify({ message: "Hello BUPT" }), {
+      status: 200,
+      headers: { 
+        "Content-Type": "application/json;charset=UTF-8" 
+      },
+    });
+  } catch (e) {
+    return new Response(e.stack, { status: 500 });
+  }
 }
