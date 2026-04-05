@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
-    "build": "cd frontend && npm install && npm run build && cd .. && cp -r api ./frontend/dist/api && cp -r backend ./frontend/dist/backend",
+    "build": "npm install && cd frontend && npm install && npm run build && cd .. && cp -r backend frontend/dist/ && cp -r api frontend/dist/",
     "start:backend": "npm --prefix backend run start"
   },
   "devDependencies": {
