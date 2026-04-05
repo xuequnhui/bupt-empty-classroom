@@ -99,11 +99,15 @@ function App() {
         }
 
         const data = await response.json()
-        setFloorOptions(data.floors)
-        setFilters((current) => ({
-          ...current,
-          floor: data.floors.includes(current.floor) ? current.floor : '',
-        }))
+        if (data && Array.isArray(data.floors)) {
+          setFloorOptions(data.floors)
+          setFilters((current) => ({
+            ...current,
+            floor: data.floors.includes(current.floor) ? current.floor : '',
+          }))
+        } else {
+          setFloorOptions([])
+        }
       } catch (requestError) {
         if (requestError instanceof Error && requestError.name === 'AbortError') {
           return
@@ -123,7 +127,7 @@ function App() {
   }, [filters.campus, filters.building])
 
   useEffect(() => {
-    if (!filters.building || filters.timeSlots.length === 0) {
+    if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
       return
     }
     handleSearch()
@@ -131,13 +135,14 @@ function App() {
 
   const occupancyRate = useMemo(() => {
     // 使用 可选链 ?. 确保即使 result 或 summary 是空的，也不会崩溃
-    if (!result?.summary || result.summary.total === 0) {
+    if (!result?.summary || typeof result.summary.total !== 'number' || result.summary.total === 0) {
       return 0
     }
     return Math.round((result.summary.busy / result.summary.total) * 100)
   }, [result])
 
   const selectedTimeSlotLabels = useMemo(() => {
+    if (!Array.isArray(filters.timeSlots)) return '未选择时间段'
     const labels = timeSlotOptions
       .filter((option) => filters.timeSlots.includes(option.value))
       .map((option) => option.label)
@@ -146,7 +151,7 @@ function App() {
   }, [filters.timeSlots])
 
   async function handleSearch() {
-    if (!filters.building || filters.timeSlots.length === 0) {
+    if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
       return
     }
 
@@ -186,6 +191,7 @@ function App() {
 
   function toggleTimeSlot(timeSlot: string) {
     setFilters((current) => {
+      if (!Array.isArray(current.timeSlots)) return { ...current, timeSlots: [timeSlot] }
       const alreadySelected = current.timeSlots.includes(timeSlot)
       const nextTimeSlots = alreadySelected ? current.timeSlots.filter((item) => item !== timeSlot) : [...current.timeSlots, timeSlot]
 
@@ -288,7 +294,7 @@ function App() {
                 <div className="time-slot-grid">
                   {timeSlotOptions.map((option) => (
                     <button
-                      className={`time-slot-chip ${filters.timeSlots.includes(option.value) ? 'selected' : ''}`}
+                      className={`time-slot-chip ${(filters.timeSlots || []).includes(option.value) ? 'selected' : ''}`}
                       key={option.value}
                       type="button"
                       onClick={() => toggleTimeSlot(option.value)}
@@ -351,8 +357,8 @@ function App() {
                       {result.query.campus} · {result.query.building}
                     </h3>
                     <p>
-                      {result.query.date} / {result.query.floor} / {timeSlotOptions
-                        .filter((option) => result.query.timeSlots.includes(option.value))
+                      {result.query.date} / {result.query.floor || '全部楼层'} / {timeSlotOptions
+                        .filter((option) => (result.query.timeSlots || []).includes(option.value))
                         .map((option) => option.label)
                         .join('、')}
                     </p>
