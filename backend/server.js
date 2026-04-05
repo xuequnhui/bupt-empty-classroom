@@ -1,13 +1,15 @@
 const express = require('express')
 const cors = require('cors')
+const path = require('path')
 const { buildQueryResult, campusBuildingMap, getFloorOptions } = require('./data/mockData')
 
 const app = express()
-const port = 4000
+const port = process.env.PORT || 4000
 
 app.use(cors())
 app.use(express.json())
 
+// API Routes
 app.get('/api/health', (_request, response) => {
   response.json({
     success: true,
@@ -93,10 +95,21 @@ app.get('/api/availability', (request, response) => {
   response.json(buildQueryResult({ campus, building, date, floor, timeSlots }))
 })
 
+// Serve static files in production
+const distPath = path.join(__dirname, '../frontend/dist')
+app.use(express.static(distPath))
+
+// Handle SPA routing - send all other requests to index.html
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api/')) {
+    res.sendFile(path.join(distPath, 'index.html'))
+  }
+})
+
 if (require.main === module) {
-  app.listen(port, () => {
-    console.log(`BUPT 空教室后端服务已启动: http://localhost:${port}`)
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`BUPT 空教室后端服务已启动: http://0.0.0.0:${port}`)
   })
 }
 
-export default app;
+module.exports = app
