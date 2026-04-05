@@ -47,7 +47,7 @@ function App() {
     async function loadBuildings() {
       try {
         setError('')
-        const response = await fetch(`/api/buildings?campus=${filters.campus}`, {
+        const response = await fetch(`api/buildings?campus=${filters.campus}`, {
           signal: controller.signal,
         })
         if (!response.ok) {
@@ -64,10 +64,6 @@ function App() {
           setBuildingOptions([])
           console.warn('后端返回格式非预期:', data)
         }
-        setFilters((current) => ({
-          ...current,
-          building: data.buildings.includes(current.building) ? current.building : data.buildings[0] ?? '',
-        }))
       } catch (requestError) {
         if (requestError instanceof Error && requestError.name === 'AbortError') {
           return
@@ -94,7 +90,7 @@ function App() {
           campus: filters.campus,
           building: filters.building,
         })
-        const response = await fetch(`/api/floors?${query.toString()}`, {
+        const response = await fetch(`api/floors?${query.toString()}`, {
           signal: controller.signal,
         })
 
@@ -127,11 +123,11 @@ function App() {
   }, [filters.campus, filters.building])
 
   useEffect(() => {
-    if (!filters.building) {
+    if (!filters.building || filters.timeSlots.length === 0) {
       return
     }
     handleSearch()
-  }, [filters.building, filters.floor])
+  }, [filters.campus, filters.date, filters.building, filters.floor, filters.timeSlots])
 
   const occupancyRate = useMemo(() => {
     // 使用 可选链 ?. 确保即使 result 或 summary 是空的，也不会崩溃
@@ -168,7 +164,7 @@ function App() {
       filters.timeSlots.forEach((timeSlot) => {
         query.append('timeSlot', timeSlot)
       })
-      const response = await fetch(`/api/availability?${query.toString()}`)
+      const response = await fetch(`api/availability?${query.toString()}`)
       if (!response.ok) {
         throw new Error('查询失败')
       }
