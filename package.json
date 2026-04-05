@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
-    "build": "npm --prefix frontend run build && node scripts/prepare-vercel-static.js",
+    "build": "cd frontend && npm install && npm run build && cd .. && node scripts/prepare-vercel-static.js",
     "start:backend": "npm --prefix backend run start"
   },
   "devDependencies": {
