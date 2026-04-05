@@ -93,6 +93,10 @@ app.get('/api/availability', (request, response) => {
   response.json(buildQueryResult({ campus, building, date, floor, timeSlots }))
 })
 
-app.listen(port, () => {
-  console.log(`BUPT 空教室后端服务已启动: http://localhost:${port}`)
-})
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`BUPT 空教室后端服务已启动: http://localhost:${port}`)
+  })
+}
+
+module.exports = app
