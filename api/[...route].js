@@ -1,6 +1,6 @@
 
-import xituchengBuildings from '../backend/data/xitucheng/buildings.json' assert { type: 'json' };
-import shaheBuildings from '../backend/data/shahe/buildings.json' assert { type: 'json' };
+const xituchengBuildings = ["教一楼", "教二楼", "教三楼", "教四楼", "西配楼"]; 
+const shaheBuildings = ["教零", "教一", "教二", "教三", "实验楼"]; 
 
 export default {
   async fetch(request) {
@@ -12,12 +12,15 @@ export default {
     if (url.pathname.includes('/api/buildings')) {
       const buildings = campus === 'shahe' ? shaheBuildings : xituchengBuildings;
       return new Response(JSON.stringify({ buildings }), {
-        headers: { "Content-Type": "application/json" }
+        headers: { 
+          "Content-Type": "application/json;charset=UTF-8",
+          "Access-Control-Allow-Origin": "*" 
+        }
       });
     }
 
 
-    return new Response(JSON.stringify({ message: "Handler initialized" }), {
+    return new Response(JSON.stringify({ message: "API is working" }), {
       headers: { "Content-Type": "application/json" }
     });
   }
