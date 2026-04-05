@@ -1,6 +1,6 @@
 
-const xituchengBuildings = ["教一楼", "教二楼", "教三楼", "教四楼", "西配楼"]; 
-const shaheBuildings = ["教零", "教一", "教二", "教三", "实验楼"]; 
+const xituchengBuildings = ["教一楼", "教二楼", "教三楼", "教四楼", "西配楼"];
+const shaheBuildings = ["教零", "教一", "教二", "教三", "实验楼"];
 
 export default {
   async fetch(request) {
@@ -9,9 +9,10 @@ export default {
     const campus = params.get('campus');
 
 
-    if (url.pathname.includes('/api/buildings')) {
+    if (url.pathname.includes('/buildings')) {
       const buildings = campus === 'shahe' ? shaheBuildings : xituchengBuildings;
       return new Response(JSON.stringify({ buildings }), {
+        status: 200,
         headers: { 
           "Content-Type": "application/json;charset=UTF-8",
           "Access-Control-Allow-Origin": "*" 
@@ -19,8 +20,8 @@ export default {
       });
     }
 
-
-    return new Response(JSON.stringify({ message: "API is working" }), {
+    return new Response(JSON.stringify({ message: "API is alive", path: url.pathname }), {
+      status: 200,
       headers: { "Content-Type": "application/json" }
     });
   }
