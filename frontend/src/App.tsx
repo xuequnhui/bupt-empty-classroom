@@ -33,6 +33,27 @@ const initialFilters: SearchFilters = {
   timeSlots: [timeSlotOptions[0].value],
 }
 
+function getApiBase() {
+  if (typeof window === 'undefined') {
+    return '/api'
+  }
+
+  const { origin, pathname } = window.location
+  const match = pathname.match(/\/proxy\/\d+\//)
+
+  if (match && typeof match.index === 'number') {
+    const prefix = `${pathname.slice(0, match.index)}/proxy/4000/`
+    return `${origin}${prefix}api`
+  }
+
+  return `${origin}/api`
+}
+
+function apiUrl(path: string) {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return `${getApiBase()}${normalized}`
+}
+
 function App() {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters)
   const [buildingOptions, setBuildingOptions] = useState<string[]>([])
@@ -47,7 +68,7 @@ function App() {
     async function loadBuildings() {
       try {
         setError('')
-        const response = await fetch(`api/buildings?campus=${filters.campus}`, {
+        const response = await fetch(apiUrl(`/buildings?campus=${filters.campus}`), {
           signal: controller.signal,
         })
         if (!response.ok) {
@@ -90,7 +111,7 @@ function App() {
           campus: filters.campus,
           building: filters.building,
         })
-        const response = await fetch(`api/floors?${query.toString()}`, {
+        const response = await fetch(apiUrl(`/floors?${query.toString()}`), {
           signal: controller.signal,
         })
 
@@ -169,7 +190,7 @@ function App() {
       filters.timeSlots.forEach((timeSlot) => {
         query.append('timeSlot', timeSlot)
       })
-      const response = await fetch(`api/availability?${query.toString()}`)
+      const response = await fetch(apiUrl(`/availability?${query.toString()}`))
       if (!response.ok) {
         throw new Error('查询失败')
       }
