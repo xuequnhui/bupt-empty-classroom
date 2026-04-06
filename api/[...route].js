@@ -1,60 +1,168 @@
+const dataset = require('../backend/data/data.json')
+
+const weekdayLabels = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+
+const timeSlotSectionMap = {
+  '08:00-08:45': '01',
+  '08:50-09:35': '02',
+  '09:50-10:35': '03',
+  '10:40-11:25': '04',
+  '11:30-12:15': '05',
+  '13:00-13:45': '06',
+  '13:50-14:35': '07',
+  '14:45-15:30': '08',
+  '15:40-16:25': '09',
+  '16:35-17:20': '10',
+  '17:25-18:10': '11',
+  '18:30-19:15': '12',
+  '19:20-20:05': '13',
+  '20:10-20:55': '14',
+}
+
+const campusAliasMap = {
+  xitucheng: 'xitucheng',
+  '西土城校区': 'xitucheng',
+  '校本部': 'xitucheng',
+  shahe: 'shahe',
+  '沙河校区': 'shahe',
+}
+
+function normalizeCampus(value) {
+  return campusAliasMap[value] ?? value
+}
+
+function normalizeSection(value) {
+  return String(value).padStart(2, '0')
+}
+
+function loadRawClassroomData() {
+  const parsed = dataset && typeof dataset === 'object' ? dataset : {}
+  return Array.isArray(parsed.classrooms) ? parsed.classrooms : []
+}
+
+function buildDatasetIndex(rawClassrooms) {
+  const roomSetByBuilding = new Map()
+  const scheduleByRoomAndDay = new Map()
+  const buildingSetByCampus = new Map()
+
+  rawClassrooms.forEach((entry) => {
+    const campus = normalizeCampus(entry.campus)
+    const building = entry.building
+    const room = entry.roomName
+    const dayOfWeek = entry.dayOfWeek
+
+    if (!campus || !building || !room || !dayOfWeek) {
+      return
+    }
+
+    if (!buildingSetByCampus.has(campus)) {
+      buildingSetByCampus.set(campus, new Set())
+    }
+    buildingSetByCampus.get(campus).add(building)
+
+    const buildingKey = `${campus}::${building}`
+    const roomDayKey = `${campus}::${building}::${room}::${dayOfWeek}`
+
+    if (!roomSetByBuilding.has(buildingKey)) {
+      roomSetByBuilding.set(buildingKey, new Set())
+    }
+    roomSetByBuilding.get(buildingKey).add(room)
+
+    const sectionMap = new Map()
+    ;(entry.sections ?? []).forEach((sectionEntry) => {
+      sectionMap.set(normalizeSection(sectionEntry.section), {
+        occupied: Boolean(sectionEntry.occupied),
+        details: sectionEntry.details ?? '',
+      })
+    })
+
+    scheduleByRoomAndDay.set(roomDayKey, sectionMap)
+  })
+
+  return {
+    roomSetByBuilding,
+    scheduleByRoomAndDay,
+    buildingSetByCampus,
+  }
+}
+
+const datasetIndex = buildDatasetIndex(loadRawClassroomData())
+
 const campusBuildingMap = {
   xitucheng: {
     label: '西土城校区',
-    buildings: ['教一楼', '教二楼', '教三楼', '新科研楼', '未来学习大楼'],
+    buildings: [],
   },
   shahe: {
     label: '沙河校区',
-    buildings: ['教学实验综合楼', 'S1 教学楼', 'S2 教学楼', '学院楼'],
+    buildings: [],
   },
 }
 
-const classroomTemplate = {
-  '教一楼': [
-    { room: '教一楼 101', floor: '1F', capacity: 80, status: 'available', description: '多媒体教室，适合小组讨论与自习。' },
-    { room: '教一楼 204', floor: '2F', capacity: 120, status: 'busy', description: '当前时段有课程安排。' },
-    { room: '教一楼 305', floor: '3F', capacity: 60, status: 'available', description: '靠窗安静区域，适合短时复习。' },
-  ],
-  '教二楼': [
-    { room: '教二楼 102', floor: '1F', capacity: 90, status: 'busy', description: '设备齐全，当前已被占用。' },
-    { room: '教二楼 208', floor: '2F', capacity: 70, status: 'available', description: '教室光线较好，适合个人学习。' },
-    { room: '教二楼 405', floor: '4F', capacity: 110, status: 'available', description: '大教室，适合多人集体自习。' },
-  ],
-  '教三楼': [
-    { room: '教三楼 201', floor: '2F', capacity: 75, status: 'available', description: '临近楼梯口，进出方便。' },
-    { room: '教三楼 307', floor: '3F', capacity: 100, status: 'busy', description: '当前有实验课占用。' },
-    { room: '教三楼 402', floor: '4F', capacity: 90, status: 'available', description: '网络条件较稳定。' },
-  ],
-  '新科研楼': [
-    { room: '新科研楼 A201', floor: '2F', capacity: 48, status: 'available', description: '空间安静，适合个人学习与查阅资料。' },
-    { room: '新科研楼 B312', floor: '3F', capacity: 36, status: 'busy', description: '当前有科研讨论或预约使用。' },
-    { room: '新科研楼 C405', floor: '4F', capacity: 60, status: 'available', description: '座位充足，适合中等规模自习。' },
-  ],
-  '未来学习大楼': [
-    { room: '未来学习大楼 101', floor: '1F', capacity: 120, status: 'available', description: '开放式智慧教室，适合多种学习场景。' },
-    { room: '未来学习大楼 305', floor: '3F', capacity: 80, status: 'busy', description: '当前有课程或研讨活动安排。' },
-    { room: '未来学习大楼 508', floor: '5F', capacity: 64, status: 'available', description: '数智化学习空间，适合长时间自习。' },
-  ],
-  '教学实验综合楼': [
-    { room: '综教楼 101', floor: '1F', capacity: 120, status: 'busy', description: '基础课上课中。' },
-    { room: '综教楼 303', floor: '3F', capacity: 80, status: 'available', description: '多媒体配置完善。' },
-    { room: '综教楼 509', floor: '5F', capacity: 60, status: 'available', description: '适合中型人数复习。' },
-  ],
-  'S1 教学楼': [
-    { room: 'S1-201', floor: '2F', capacity: 90, status: 'available', description: '距离食堂较近，适合短时学习。' },
-    { room: 'S1-304', floor: '3F', capacity: 120, status: 'busy', description: '当前有课程进行。' },
-    { room: 'S1-502', floor: '5F', capacity: 60, status: 'available', description: '相对安静，适合刷题。' },
-  ],
-  'S2 教学楼': [
-    { room: 'S2-105', floor: '1F', capacity: 100, status: 'busy', description: '上午时段占用率较高。' },
-    { room: 'S2-207', floor: '2F', capacity: 80, status: 'available', description: '空闲率较高。' },
-    { room: 'S2-408', floor: '4F', capacity: 100, status: 'available', description: '适合结伴自习。' },
-  ],
-  '学院楼': [
-    { room: '学院楼 202', floor: '2F', capacity: 45, status: 'available', description: '小教室，适合个人学习。' },
-    { room: '学院楼 315', floor: '3F', capacity: 55, status: 'busy', description: '当前用于专题讨论。' },
-    { room: '学院楼 406', floor: '4F', capacity: 65, status: 'available', description: '安静整洁，适合晚间自习。' },
-  ],
+function getWeekdayLabel(date) {
+  const value = new Date(`${date}T00:00:00`)
+  if (Number.isNaN(value.getTime())) {
+    return null
+  }
+  return weekdayLabels[value.getDay()]
+}
+
+function deriveFloor(roomName) {
+  const matches = String(roomName).match(/(\d{3,4})(?!.*\d)/)
+  if (!matches) return '--'
+  const floor = Number(matches[1].slice(0, 1))
+  return Number.isNaN(floor) ? '--' : `${floor}F`
+}
+
+function deriveCapacity(roomName) {
+  const matches = String(roomName).match(/(\d{3,4})(?!.*\d)/)
+  if (!matches) return 60
+  const roomNumber = Number(matches[1])
+  if (Number.isNaN(roomNumber)) return 60
+  if (roomNumber >= 900) return 40
+  if (roomNumber >= 500) return 60
+  if (roomNumber >= 300) return 80
+  if (roomNumber >= 200) return 70
+  return 120
+}
+
+function buildInventory(campus, building) {
+  const buildingKey = `${campus}::${building}`
+  const roomSet = datasetIndex.roomSetByBuilding.get(buildingKey)
+  const rooms = roomSet ? Array.from(roomSet) : []
+  return rooms.sort((left, right) => String(left).localeCompare(String(right), 'zh-CN', { numeric: true }))
+}
+
+function getBuildingsForCampus(campus) {
+  const buildingSet = datasetIndex.buildingSetByCampus.get(campus)
+  const buildings = buildingSet ? Array.from(buildingSet) : []
+  if (buildings.length > 0) {
+    return buildings.sort((left, right) => String(left).localeCompare(String(right), 'zh-CN', { numeric: true }))
+  }
+
+  const fallback = campusBuildingMap[campus]?.buildings ?? []
+  return fallback
+}
+
+function getFloorOptions({ campus, building }) {
+  const inventory = buildInventory(campus, building)
+  const floors = inventory.map((roomName) => deriveFloor(roomName))
+  const uniqueFloors = [...new Set(floors.filter(Boolean).filter((floor) => floor !== '--'))]
+  return uniqueFloors.sort((left, right) => String(left).localeCompare(String(right), 'zh-CN', { numeric: true }))
+}
+
+function buildDescription({ isAvailable, timeSlots, occupiedDetails, hasScheduleRecord }) {
+  if (isAvailable) {
+    return hasScheduleRecord
+      ? `所选 ${timeSlots.length} 个节次均无排课，可直接使用。`
+      : `该教室在本学期数据中未提及，默认视为长期空闲。`
+  }
+
+  if (occupiedDetails.length > 0) {
+    return occupiedDetails.join('；')
+  }
+
+  return '所选节次内存在排课，不满足全时段空闲条件。'
 }
 
 function jsonResponse(payload, { status = 200, headers = {} } = {}) {
@@ -89,7 +197,8 @@ async function handleFetch(request) {
 
   if (pathname.includes('/buildings')) {
     const campus = url.searchParams.get('campus') || 'xitucheng'
-    const campusInfo = campusBuildingMap[campus]
+    const campusCode = normalizeCampus(campus)
+    const campusInfo = campusBuildingMap[campusCode] ?? { label: campus, buildings: [] }
 
     if (!campusInfo) {
       return jsonResponse({ success: false, message: '未找到对应校区' }, { status: 400 })
@@ -97,30 +206,32 @@ async function handleFetch(request) {
 
     return jsonResponse({
       success: true,
-      campus,
+      campus: campusCode,
       label: campusInfo.label,
-      buildings: campusInfo.buildings,
+      buildings: getBuildingsForCampus(campusCode),
     })
   }
 
   if (pathname.includes('/floors')) {
     const campus = url.searchParams.get('campus') || 'xitucheng'
+    const campusCode = normalizeCampus(campus)
     const building = url.searchParams.get('building')
 
     if (!building) {
       return jsonResponse({ success: false, message: '请提供教学楼参数' }, { status: 400 })
     }
 
-    if (!campusBuildingMap[campus]) {
+    if (!campusBuildingMap[campusCode]) {
       return jsonResponse({ success: false, message: '校区参数不正确' }, { status: 400 })
     }
 
-    const floors = [...new Set((classroomTemplate[building] ?? []).map((room) => room.floor).filter(Boolean))]
-    return jsonResponse({ success: true, campus, building, floors })
+    const floors = getFloorOptions({ campus: campusCode, building })
+    return jsonResponse({ success: true, campus: campusCode, building, floors })
   }
 
   if (pathname.includes('/availability')) {
     const campus = url.searchParams.get('campus') || 'xitucheng'
+    const campusCode = normalizeCampus(campus)
     const date = url.searchParams.get('date')
     const building = url.searchParams.get('building')
     const floor = url.searchParams.get('floor') || ''
@@ -133,11 +244,52 @@ async function handleFetch(request) {
       )
     }
 
-    if (!campusBuildingMap[campus]) {
+    if (!campusBuildingMap[campusCode]) {
       return jsonResponse({ success: false, message: '校区参数不正确' }, { status: 400 })
     }
 
-    const inventory = (classroomTemplate[building] ?? []).filter((room) => !floor || room.floor === floor)
+    const weekdayLabel = getWeekdayLabel(date)
+    if (!weekdayLabel) {
+      return jsonResponse({ success: false, message: '日期格式不正确' }, { status: 400 })
+    }
+
+    const inventory = buildInventory(campusCode, building)
+      .map((roomName) => {
+        const roomDayKey = `${campusCode}::${building}::${roomName}::${weekdayLabel}`
+        const scheduleRecord = datasetIndex.scheduleByRoomAndDay.get(roomDayKey)
+        const occupiedDetails = []
+
+        const isAvailable = timeSlots.every((timeSlot) => {
+          const sectionCode = timeSlotSectionMap[timeSlot]
+          if (!sectionCode) return true
+          const sectionRecord = scheduleRecord?.get(sectionCode)
+          if (sectionRecord?.occupied) {
+            if (sectionRecord.details) {
+              occupiedDetails.push(sectionRecord.details)
+            }
+            return false
+          }
+          return true
+        })
+
+        const uniqueDetails = [...new Set(occupiedDetails)]
+        const derivedFloor = deriveFloor(roomName)
+
+        return {
+          room: roomName,
+          status: isAvailable ? 'available' : 'busy',
+          capacity: deriveCapacity(roomName),
+          floor: derivedFloor === '--' ? '' : derivedFloor,
+          description: buildDescription({
+            isAvailable,
+            timeSlots,
+            occupiedDetails: uniqueDetails,
+            hasScheduleRecord: Boolean(scheduleRecord),
+          }),
+        }
+      })
+      .filter((room) => (!floor ? true : room.floor === floor))
+
     const available = inventory.filter((room) => room.status === 'available').length
     const busy = inventory.length - available
 
@@ -145,8 +297,8 @@ async function handleFetch(request) {
       success: true,
       message: '查询成功',
       query: {
-        campus: campusBuildingMap[campus]?.label ?? campus,
-        campusCode: campus,
+        campus: campusBuildingMap[campusCode]?.label ?? campusCode,
+        campusCode,
         building,
         floor: floor || '全部楼层',
         date,
@@ -157,13 +309,7 @@ async function handleFetch(request) {
         available,
         busy,
       },
-      classrooms: inventory.map((room) => ({
-        room: room.room,
-        status: room.status,
-        capacity: room.capacity,
-        floor: room.floor,
-        description: room.description,
-      })),
+      classrooms: inventory,
     })
   }
 
