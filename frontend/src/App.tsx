@@ -61,6 +61,7 @@ function App() {
   const [result, setResult] = useState<SearchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isManualSearch, setIsManualSearch] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -151,7 +152,7 @@ function App() {
     if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
       return
     }
-    handleSearch()
+    handleSearch({ manual: false })
   }, [filters.campus, filters.date, filters.building, filters.floor, filters.timeSlots])
 
   const occupancyRate = useMemo(() => {
@@ -171,12 +172,21 @@ function App() {
     return labels.length > 0 ? labels.join('、') : '未选择时间段'
   }, [filters.timeSlots])
 
-  async function handleSearch() {
+  const displayedClassrooms = useMemo(() => {
+    if (!result) {
+      return []
+    }
+
+    return isManualSearch ? result.classrooms.filter((room) => room.status === 'available') : result.classrooms
+  }, [isManualSearch, result])
+
+  async function handleSearch({ manual }: { manual: boolean }) {
     if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
       return
     }
 
     try {
+      setIsManualSearch(manual)
       setLoading(true)
       setError('')
       const query = new URLSearchParams({
@@ -265,7 +275,7 @@ function App() {
                 <span className="panel-kicker">查询条件</span>
                 <h2>快速筛选</h2>
               </div>
-              <button className="primary-button" type="button" onClick={handleSearch} disabled={loading || !filters.building || filters.timeSlots.length === 0}>
+              <button className="primary-button" type="button" onClick={() => handleSearch({ manual: true })} disabled={loading || !filters.building || filters.timeSlots.length === 0}>
                 {loading ? '查询中...' : '查询空教室'}
               </button>
             </div>
@@ -396,7 +406,7 @@ function App() {
                 </div>
 
                 <div className="classroom-list">
-                  {result.classrooms.map((room) => (
+                  {displayedClassrooms.map((room) => (
                     <article className={`classroom-card ${room.status}`} key={room.room}>
                       <div className="classroom-main">
                         <div>
