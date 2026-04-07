@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CampusOption, SearchFilters, SearchResponse, TimeSlotOption } from './types'
 
 const campusOptions: CampusOption[] = [
@@ -62,6 +62,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [isManualSearch, setIsManualSearch] = useState(false)
+  const manualSearchScrollYRef = useRef<number | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -210,6 +211,18 @@ function App() {
       setError('暂时无法查询空教室，请检查后端服务是否正常。')
     } finally {
       setLoading(false)
+      if (manual && typeof window !== 'undefined') {
+        const scrollY = manualSearchScrollYRef.current
+        manualSearchScrollYRef.current = null
+
+        if (typeof scrollY === 'number') {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              window.scrollTo({ top: scrollY })
+            })
+          })
+        }
+      }
     }
   }
 
@@ -275,7 +288,15 @@ function App() {
                 <span className="panel-kicker">查询条件</span>
                 <h2>快速筛选</h2>
               </div>
-              <button className="primary-button" type="button" onClick={() => handleSearch({ manual: true })} disabled={loading || !filters.building || filters.timeSlots.length === 0}>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => {
+                  manualSearchScrollYRef.current = typeof window === 'undefined' ? null : window.scrollY
+                  handleSearch({ manual: true })
+                }}
+                disabled={loading || !filters.building || filters.timeSlots.length === 0}
+              >
                 {loading ? '查询中...' : '查询空教室'}
               </button>
             </div>
