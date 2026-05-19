@@ -51,15 +51,23 @@ function loadRawClassroomData() {
 function buildDatasetIndex(rawClassrooms) {
   const roomSetByBuilding = new Map()
   const scheduleByRoomAndDay = new Map()
+  let latestUpdatedAt = null
 
   rawClassrooms.forEach((entry) => {
     const campus = normalizeCampus(entry.campus)
     const building = entry.building
     const room = entry.roomName
     const dayOfWeek = entry.dayOfWeek
+    const updatedAt = typeof entry.updatedAt === 'string' ? Date.parse(entry.updatedAt) : Number.NaN
 
     if (!campus || !building || !room || !dayOfWeek) {
       return
+    }
+
+    if (!Number.isNaN(updatedAt)) {
+      if (!latestUpdatedAt || updatedAt > Date.parse(latestUpdatedAt)) {
+        latestUpdatedAt = new Date(updatedAt).toISOString()
+      }
     }
 
     const buildingKey = `${campus}::${building}`
@@ -84,6 +92,7 @@ function buildDatasetIndex(rawClassrooms) {
   })
 
   return {
+    latestUpdatedAt,
     roomSetByBuilding,
     scheduleByRoomAndDay,
   }
@@ -228,6 +237,7 @@ function buildRealQueryResult({ campus, building, date, floor, timeSlots }, { ca
   return {
     success: true,
     message: '查询成功',
+    lastUpdatedAt: datasetIndex.latestUpdatedAt,
     query: {
       campus: campusBuildingMap[campus]?.label ?? campus,
       campusCode: campus,
