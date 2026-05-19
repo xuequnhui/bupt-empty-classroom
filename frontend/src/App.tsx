@@ -54,6 +54,27 @@ function apiUrl(path: string) {
   return `${getApiBase()}${normalized}`
 }
 
+function formatUpdatedAt(value?: string | null) {
+  if (!value) {
+    return '暂无更新记录'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return '暂无更新记录'
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
 function App() {
   const [filters, setFilters] = useState<SearchFilters>(initialFilters)
   const [buildingOptions, setBuildingOptions] = useState<string[]>([])
@@ -181,6 +202,8 @@ function App() {
     return isManualSearch ? result.classrooms.filter((room) => room.status === 'available') : result.classrooms
   }, [isManualSearch, result])
 
+  const latestUpdatedLabel = useMemo(() => formatUpdatedAt(result?.lastUpdatedAt), [result?.lastUpdatedAt])
+
   async function handleSearch({ manual }: { manual: boolean }) {
     if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
       return
@@ -259,6 +282,10 @@ function App() {
             <p>
               面向校区、日期、教学楼与节次的空闲教室检索，支持多节次交集筛选，帮助你快速定位合适的学习空间。
             </p>
+            <div className="hero-update-card">
+              <span className="hero-update-label">最近更新</span>
+              <strong>{latestUpdatedLabel}</strong>
+            </div>
           </div>
 
           <div className="hero-highlights">
