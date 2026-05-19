@@ -35,6 +35,7 @@ export interface ClassroomStatus {
 export interface SearchResponse {
   success: boolean
   message: string
+  lastUpdatedAt?: string | null
   query: {
     campus: string
     campusCode: CampusCode
