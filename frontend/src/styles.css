@@ -35,6 +35,8 @@ button {
 
 .page-shell {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   overflow: hidden;
 }
@@ -92,9 +94,23 @@ button {
 .layout {
   position: relative;
   z-index: 1;
+  width: 100%;
   max-width: 1240px;
   margin: 0 auto;
-  padding: 56px 24px 88px;
+  padding: 56px 24px 32px;
+}
+
+.site-footer {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  padding: 0 16px 24px;
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.site-footer a {
+  color: #c9d9f7;
 }
 
 .hero-card,
@@ -698,7 +714,7 @@ button {
 
 @media (max-width: 720px) {
   .layout {
-    padding: 28px 16px 56px;
+    padding: 28px 16px 24px;
   }
 
   .hero-card,

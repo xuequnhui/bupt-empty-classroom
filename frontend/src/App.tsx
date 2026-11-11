@@ -487,6 +487,10 @@ function App() {
           </section>
         </section>
       </main>
+
+      <footer className="site-footer">
+        <a href="https://beian.miit.gov.cn/">京ICP备2026019440号-1</a>
+      </footer>
     </div>
   )
 }
