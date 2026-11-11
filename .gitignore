@@ -1,6 +1,12 @@
-frontend/node_modules
+node_modules
 frontend/dist
 backend/node_modules
-node_modules
 public
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+.vercel
 npm-debug.log*
+*.log
