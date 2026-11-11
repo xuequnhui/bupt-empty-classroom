@@ -668,6 +668,18 @@ button {
   color: #ffd8e4;
 }
 
+.status-banner.warning {
+  background: linear-gradient(135deg, rgba(122, 82, 18, 0.3), rgba(96, 66, 15, 0.22));
+  border: 1px solid rgba(255, 190, 92, 0.32);
+  color: #ffe9c4;
+}
+
+.filter-hint {
+  margin-top: 14px;
+  font-size: 13px;
+  color: #9aaed5;
+}
+
 .empty-state {
   margin-top: 24px;
   padding: 26px;

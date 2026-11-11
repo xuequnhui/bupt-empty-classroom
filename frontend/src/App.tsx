@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CampusOption, SearchFilters, SearchResponse, TimeSlotOption } from './types'
 
 const campusOptions: CampusOption[] = [
@@ -6,7 +6,12 @@ const campusOptions: CampusOption[] = [
   { value: 'shahe', label: '沙河校区' },
 ]
 
-const today = new Date().toISOString().split('T')[0]
+// 课表快照超过该天数视为可能过期，给出提示
+const STALE_THRESHOLD_MS = 14 * 24 * 60 * 60 * 1000
+
+// 以北京时间为准取当天日期：toISOString() 是 UTC，凌晨时段会把日期回落到昨天。
+// 模块加载时求值即可满足默认日期与 min 约束。
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
 
 const timeSlotOptions: TimeSlotOption[] = [
   { value: '08:00-08:45', label: '第 1 节 · 08:00 - 08:45' },
@@ -25,33 +30,9 @@ const timeSlotOptions: TimeSlotOption[] = [
   { value: '20:10-20:55', label: '第 14 节 · 20:10 - 20:55' },
 ]
 
-const initialFilters: SearchFilters = {
-  campus: 'xitucheng',
-  date: today,
-  building: '',
-  floor: '',
-  timeSlots: [timeSlotOptions[0].value],
-}
-
-function getApiBase() {
-  if (typeof window === 'undefined') {
-    return '/api'
-  }
-
-  const { origin, pathname } = window.location
-  const match = pathname.match(/\/proxy\/\d+\//)
-
-  if (match && typeof match.index === 'number') {
-    const prefix = `${pathname.slice(0, match.index)}/proxy/4000/`
-    return `${origin}${prefix}api`
-  }
-
-  return `${origin}/api`
-}
-
 function apiUrl(path: string) {
   const normalized = path.startsWith('/') ? path : `/${path}`
-  return `${getApiBase()}${normalized}`
+  return `/api${normalized}`
 }
 
 function formatUpdatedAt(value?: string | null) {
@@ -76,14 +57,103 @@ function formatUpdatedAt(value?: string | null) {
 }
 
 function App() {
-  const [filters, setFilters] = useState<SearchFilters>(initialFilters)
+  const [filters, setFilters] = useState<SearchFilters>(() => ({
+    campus: 'xitucheng',
+    date: today,
+    building: '',
+    floor: '',
+    timeSlots: [timeSlotOptions[0].value],
+  }))
   const [buildingOptions, setBuildingOptions] = useState<string[]>([])
   const [floorOptions, setFloorOptions] = useState<string[]>([])
   const [result, setResult] = useState<SearchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [isManualSearch, setIsManualSearch] = useState(false)
+  const [isDataStale, setIsDataStale] = useState(false)
+
+  // 请求序号 + AbortController：保证只有最近一次查询能写入状态，并中止过期请求
+  const searchSeqRef = useRef(0)
+  const searchAbortRef = useRef<AbortController | null>(null)
   const manualSearchScrollYRef = useRef<number | null>(null)
+
+  const handleSearch = useCallback(
+    async ({ manual }: { manual: boolean }) => {
+      if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
+        return
+      }
+
+      searchAbortRef.current?.abort()
+      const controller = new AbortController()
+      searchAbortRef.current = controller
+      const seq = ++searchSeqRef.current
+
+      try {
+        setIsManualSearch(manual)
+        setLoading(true)
+        setError('')
+        const query = new URLSearchParams({
+          campus: filters.campus,
+          building: filters.building,
+          date: filters.date,
+        })
+        if (filters.floor) {
+          query.set('floor', filters.floor)
+        }
+        filters.timeSlots.forEach((timeSlot) => {
+          query.append('timeSlot', timeSlot)
+        })
+        const response = await fetch(apiUrl(`/availability?${query.toString()}`), {
+          signal: controller.signal,
+        })
+        if (!response.ok) {
+          throw new Error('查询失败')
+        }
+        const data = (await response.json()) as SearchResponse
+        if (seq !== searchSeqRef.current) {
+          return
+        }
+        setResult(data)
+        const updatedAtMs = data.lastUpdatedAt ? Date.parse(data.lastUpdatedAt) : Number.NaN
+        setIsDataStale(!Number.isNaN(updatedAtMs) && Date.now() - updatedAtMs > STALE_THRESHOLD_MS)
+      } catch (requestError) {
+        if (controller.signal.aborted || seq !== searchSeqRef.current) {
+          return
+        }
+        console.error('查询空教室失败:', requestError)
+        setError('暂时无法查询空教室，请检查后端服务是否正常。')
+      } finally {
+        if (seq === searchSeqRef.current) {
+          setLoading(false)
+          if (manual && typeof window !== 'undefined') {
+            const scrollY = manualSearchScrollYRef.current
+            manualSearchScrollYRef.current = null
+
+            if (typeof scrollY === 'number') {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  window.scrollTo({ top: scrollY })
+                })
+              })
+            }
+          }
+        }
+      }
+    },
+    [filters.campus, filters.date, filters.building, filters.floor, filters.timeSlots],
+  )
+
+  useEffect(() => {
+    if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
+      return
+    }
+    // 轻防抖：连续切换节次时合并查询，也避免在 effect 体内同步触发 setState
+    const timer = window.setTimeout(() => handleSearch({ manual: false }), 150)
+    return () => window.clearTimeout(timer)
+  }, [handleSearch, filters.building, filters.timeSlots])
+
+  // 卸载时中止未完成的查询
+  useEffect(() => () => searchAbortRef.current?.abort(), [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -170,15 +240,7 @@ function App() {
     return () => controller.abort()
   }, [filters.campus, filters.building])
 
-  useEffect(() => {
-    if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
-      return
-    }
-    handleSearch({ manual: false })
-  }, [filters.campus, filters.date, filters.building, filters.floor, filters.timeSlots])
-
   const occupancyRate = useMemo(() => {
-    // 使用 可选链 ?. 确保即使 result 或 summary 是空的，也不会崩溃
     if (!result?.summary || typeof result.summary.total !== 'number' || result.summary.total === 0) {
       return 0
     }
@@ -202,52 +264,11 @@ function App() {
     return isManualSearch ? result.classrooms.filter((room) => room.status === 'available') : result.classrooms
   }, [isManualSearch, result])
 
+  // 手动搜索只展示空闲教室时，提示有多少占用教室被过滤掉，避免与统计卡片对不上
+  const hiddenBusyCount =
+    result && isManualSearch ? result.classrooms.length - displayedClassrooms.length : 0
+
   const latestUpdatedLabel = useMemo(() => formatUpdatedAt(result?.lastUpdatedAt), [result?.lastUpdatedAt])
-
-  async function handleSearch({ manual }: { manual: boolean }) {
-    if (!filters.building || !Array.isArray(filters.timeSlots) || filters.timeSlots.length === 0) {
-      return
-    }
-
-    try {
-      setIsManualSearch(manual)
-      setLoading(true)
-      setError('')
-      const query = new URLSearchParams({
-        campus: filters.campus,
-        building: filters.building,
-        date: filters.date,
-      })
-      if (filters.floor) {
-        query.set('floor', filters.floor)
-      }
-      filters.timeSlots.forEach((timeSlot) => {
-        query.append('timeSlot', timeSlot)
-      })
-      const response = await fetch(apiUrl(`/availability?${query.toString()}`))
-      if (!response.ok) {
-        throw new Error('查询失败')
-      }
-      const data = (await response.json()) as SearchResponse
-      setResult(data)
-    } catch {
-      setError('暂时无法查询空教室，请检查后端服务是否正常。')
-    } finally {
-      setLoading(false)
-      if (manual && typeof window !== 'undefined') {
-        const scrollY = manualSearchScrollYRef.current
-        manualSearchScrollYRef.current = null
-
-        if (typeof scrollY === 'number') {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              window.scrollTo({ top: scrollY })
-            })
-          })
-        }
-      }
-    }
-  }
 
   function updateFilter<Key extends keyof SearchFilters>(key: Key, value: SearchFilters[Key]) {
     setFilters((current) => ({
@@ -319,7 +340,7 @@ function App() {
                 className="primary-button"
                 type="button"
                 onClick={() => {
-                  manualSearchScrollYRef.current = typeof window === 'undefined' ? null : window.scrollY
+                  manualSearchScrollYRef.current = window.scrollY
                   handleSearch({ manual: true })
                 }}
                 disabled={loading || !filters.building || filters.timeSlots.length === 0}
@@ -376,6 +397,7 @@ function App() {
                       className={`time-slot-chip ${(filters.timeSlots || []).includes(option.value) ? 'selected' : ''}`}
                       key={option.value}
                       type="button"
+                      aria-pressed={(filters.timeSlots || []).includes(option.value)}
                       onClick={() => toggleTimeSlot(option.value)}
                     >
                       {option.label}
@@ -404,80 +426,100 @@ function App() {
             {error ? <div className="status-banner error">{error}</div> : null}
 
             {result ? (
-              <>
-                <div className="stats-grid">
-                  <article className="stat-card">
-                    <div className="stat-label">
-                      <span className="pulse-dot neutral" />
-                      <span>教室总数</span>
-                    </div>
-                    <strong>{result.summary.total}</strong>
-                  </article>
-                  <article className="stat-card success">
-                    <div className="stat-label">
-                      <span className="pulse-dot available" />
-                      <span>空闲教室</span>
-                    </div>
-                    <strong>{result.summary.available}</strong>
-                  </article>
-                  <article className="stat-card warning">
-                    <div className="stat-label">
-                      <span className="pulse-dot busy" />
-                      <span>占用教室</span>
-                    </div>
-                    <strong>{result.summary.busy}</strong>
-                  </article>
+              isDataStale ? (
+                <div className="status-banner warning">
+                  课表数据更新于 {latestUpdatedLabel}，可能已过期，查询结果仅供参考。
                 </div>
+              ) : null
+            ) : null}
 
-                <div className="overview-card">
-                  <div>
-                    <span className="overview-label">当前查询</span>
-                    <h3>
-                      {result.query.campus} · {result.query.building}
-                    </h3>
-                    <p>
-                      {result.query.date} / {result.query.floor || '全部楼层'} / {timeSlotOptions
-                        .filter((option) => (result.query.timeSlots || []).includes(option.value))
-                        .map((option) => option.label)
-                        .join('、')}
-                    </p>
-                  </div>
-                  <div className="overview-progress">
-                    <div className="progress-copy">
-                      <span>占用率</span>
-                      <strong>{occupancyRate}%</strong>
-                    </div>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: `${occupancyRate}%` }} />
-                    </div>
-                  </div>
+            {result ? (
+              result.classrooms.length === 0 ? (
+                <div className="empty-state">
+                  <h3>暂无数据</h3>
+                  <p>{result.message}</p>
                 </div>
-
-                <div className="classroom-list">
-                  {displayedClassrooms.map((room) => (
-                    <article className={`classroom-card ${room.status}`} key={room.room}>
-                      <div className="classroom-main">
-                        <div>
-                          <div className="room-signal-row">
-                            <span className={`pulse-dot ${room.status}`} />
-                            <span className="room-signal-text">{room.status === 'available' ? '全时段可用' : '存在占用'}</span>
-                          </div>
-                          <div className="room-row">
-                            <h3>{room.room}</h3>
-                            <span className={`status-chip ${room.status}`}>{room.status === 'available' ? '空闲' : '占用'}</span>
-                          </div>
-                          <p>{room.description}</p>
-                        </div>
+              ) : (
+                <>
+                  <div className="stats-grid">
+                    <article className="stat-card">
+                      <div className="stat-label">
+                        <span className="pulse-dot neutral" />
+                        <span>教室总数</span>
                       </div>
-
-                      <div className="classroom-meta">
-                        <span>楼层：{room.floor}</span>
-                        <span>容量：{room.capacity} 人</span>
-                      </div>
+                      <strong>{result.summary.total}</strong>
                     </article>
-                  ))}
-                </div>
-              </>
+                    <article className="stat-card success">
+                      <div className="stat-label">
+                        <span className="pulse-dot available" />
+                        <span>空闲教室</span>
+                      </div>
+                      <strong>{result.summary.available}</strong>
+                    </article>
+                    <article className="stat-card warning">
+                      <div className="stat-label">
+                        <span className="pulse-dot busy" />
+                        <span>占用教室</span>
+                      </div>
+                      <strong>{result.summary.busy}</strong>
+                    </article>
+                  </div>
+
+                  <div className="overview-card">
+                    <div>
+                      <span className="overview-label">当前查询</span>
+                      <h3>
+                        {result.query.campus} · {result.query.building}
+                      </h3>
+                      <p>
+                        {result.query.date} / {result.query.floor || '全部楼层'} / {timeSlotOptions
+                          .filter((option) => (result.query.timeSlots || []).includes(option.value))
+                          .map((option) => option.label)
+                          .join('、')}
+                      </p>
+                    </div>
+                    <div className="overview-progress">
+                      <div className="progress-copy">
+                        <span>占用率</span>
+                        <strong>{occupancyRate}%</strong>
+                      </div>
+                      <div className="progress-bar">
+                        <div className="progress-fill" style={{ width: `${occupancyRate}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {hiddenBusyCount > 0 ? (
+                    <p className="filter-hint">
+                      已隐藏 {hiddenBusyCount} 间存在占用的教室，上方统计仍包含全部教室。
+                    </p>
+                  ) : null}
+
+                  <div className="classroom-list">
+                    {displayedClassrooms.map((room) => (
+                      <article className={`classroom-card ${room.status}`} key={room.room}>
+                        <div className="classroom-main">
+                          <div>
+                            <div className="room-signal-row">
+                              <span className={`pulse-dot ${room.status}`} />
+                              <span className="room-signal-text">{room.status === 'available' ? '全时段可用' : '存在占用'}</span>
+                            </div>
+                            <div className="room-row">
+                              <h3>{room.room}</h3>
+                              <span className={`status-chip ${room.status}`}>{room.status === 'available' ? '空闲' : '占用'}</span>
+                            </div>
+                            <p>{room.description}</p>
+                          </div>
+                        </div>
+
+                        <div className="classroom-meta">
+                          <span>楼层：{room.floor || '未知'}</span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              )
             ) : (
               <div className="empty-state">
                 <h3>开始查询</h3>

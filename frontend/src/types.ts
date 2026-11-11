@@ -27,7 +27,6 @@ export interface SummaryStats {
 export interface ClassroomStatus {
   room: string
   status: 'available' | 'busy'
-  capacity: number
   floor: string
   description: string
 }
