@@ -1,109 +1,37 @@
 const express = require('express')
 const cors = require('cors')
 const path = require('path')
-const { buildQueryResult, campusBuildingMap, getFloorOptions } = require('./data/mockData')
+const { handleApiRequest } = require('./lib/api')
 
 const app = express()
 const port = process.env.PORT || 4000
 
 app.use(cors())
-app.use(express.json())
 
-// API Routes
-app.get('/api/health', (_request, response) => {
-  response.json({
-    success: true,
-    message: '服务运行正常',
-  })
+// API 与生产环境（api/[...route].js）共用同一处理逻辑
+app.all('/api/*', (request, response) => {
+  const url = new URL(request.originalUrl, `http://localhost:${port}`)
+  const { status, payload } = handleApiRequest(request.method, url.pathname, url.searchParams)
+
+  if (status === 204 || payload === null || payload === undefined) {
+    response.status(status).end()
+    return
+  }
+
+  response.status(status).json(payload)
 })
 
-app.get('/api/buildings', (request, response) => {
-  const campus = request.query.campus || 'xitucheng'
-  const campusInfo = campusBuildingMap[campus]
-
-  if (!campusInfo) {
-    response.status(400).json({
-      success: false,
-      message: '未找到对应校区',
-    })
-    return
-  }
-
-  response.json({
-    success: true,
-    campus,
-    label: campusInfo.label,
-    buildings: campusInfo.buildings,
-  })
-})
-
-app.get('/api/floors', (request, response) => {
-  const campus = request.query.campus || 'xitucheng'
-  const building = request.query.building
-
-  if (!building) {
-    response.status(400).json({
-      success: false,
-      message: '请提供教学楼参数',
-    })
-    return
-  }
-
-  if (!campusBuildingMap[campus]) {
-    response.status(400).json({
-      success: false,
-      message: '校区参数不正确',
-    })
-    return
-  }
-
-  response.json({
-    success: true,
-    campus,
-    building,
-    floors: getFloorOptions({ campus, building }),
-  })
-})
-
-app.get('/api/availability', (request, response) => {
-  const campus = request.query.campus || 'xitucheng'
-  const date = request.query.date
-  const building = request.query.building
-  const floor = request.query.floor || ''
-  const timeSlots = Array.isArray(request.query.timeSlot)
-    ? request.query.timeSlot.filter(Boolean)
-    : request.query.timeSlot
-      ? [request.query.timeSlot]
-      : []
-
-  if (!date || !building || timeSlots.length === 0) {
-    response.status(400).json({
-      success: false,
-      message: '请完整提供校区、日期、教学楼和至少一个时间段',
-    })
-    return
-  }
-
-  if (!campusBuildingMap[campus]) {
-    response.status(400).json({
-      success: false,
-      message: '校区参数不正确',
-    })
-    return
-  }
-
-  response.json(buildQueryResult({ campus, building, date, floor, timeSlots }))
-})
-
-// Serve static files in production
+// 静态资源
 const distPath = path.join(__dirname, '../frontend/dist')
 app.use(express.static(distPath))
 
-// Handle SPA routing - send all other requests to index.html
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api/')) {
-    res.sendFile(path.join(distPath, 'index.html'))
-  }
+// SPA 路由回退
+app.get('*', (request, response) => {
+  response.sendFile(path.join(distPath, 'index.html'), (error) => {
+    if (error) {
+      response.status(404).json({ success: false, message: '前端构建产物缺失，请先执行 npm run build' })
+    }
+  })
 })
 
 if (require.main === module) {
